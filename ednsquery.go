@@ -247,7 +247,9 @@ Query:
 
 		r, _, err := c.Exchange(m, nameserver)
 		stat.attempts++
-		fmt.Printf("\033[2K\rRate: %v queries/sec", getStats(stat))
+
+		time, rate := getStats(stat)
+		fmt.Printf("\033[2K\r%.2f - Rate: %.6f queries/sec", time, rate)
 	Redo:
 		switch err {
 		case nil:
@@ -338,7 +340,7 @@ func setupOptions() *dns.OPT {
 	}
 }
 
-func getStats(stat *stats) float64 {
+func getStats(stat *stats) (float64, float64) {
 
 	runTime := float64(time.Since(startTime).Seconds())
 	successCount := float64(stat.success)
@@ -346,7 +348,7 @@ func getStats(stat *stats) float64 {
 
 	avgRate += successRate
 
-	return successRate
+	return runTime, successRate
 }
 
 func getStatAvg(stat *stats) float64 {
