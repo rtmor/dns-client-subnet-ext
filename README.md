@@ -11,12 +11,12 @@ Program will resolve each domain and report execution time statistics.
 **With EDNS0 client subnet extension**
 
 ```
-./ednsquery -client {*client subnet*} -d {*domain file*} @{*nameserver*}
+./ednsquery -client {client subnet} -d {domain file} @{nameserver}
 ./ednsquery -client 1.1.1.1 -d domains.txt @8.8.8.8
 ```
 
 **Without EDNS0 client subnet extension**
 ```
-./ednsquery -d {*domain file*} @{*nameserver*}
+./ednsquery -d {domain file} @{nameserver}
 ./ednsquery -d domains.txt @8.8.8.8
 ```
