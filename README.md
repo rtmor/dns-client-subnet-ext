@@ -8,9 +8,11 @@ Populate domain query file deliminated by newlines.
 
 Program will resolve each domain and report execution time statistics.
 
-### options
+### usage
 
 ```
+Usage: ./main [options] -ns {nameserver}
+
   -client string
         set edns client-subnet option
   -d string
