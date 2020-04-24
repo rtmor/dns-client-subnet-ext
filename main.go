@@ -16,6 +16,8 @@ var (
 	domainlist = flag.String("d", "", "dns query wordlists file")
 	client     = flag.String("client", "", "set edns client-subnet option")
 	nameserver = flag.String("ns", "8.8.8.8", "set preferred nameserver")
+	threads    = flag.Int("t", 100, "number of threads")
+	verbose    = flag.Bool("v", false, "enable verbose output of dns queries (debug)")
 )
 
 type statistics struct {
@@ -32,16 +34,17 @@ var (
 
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [domain-file] [client-subnet] [nameserver]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] -ns {nameserver}\n", os.Args[0])
 		flag.PrintDefaults()
 	}
-	if len(os.Args) < 3 {
+
+	flag.Parse()
+	if *domainlist == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	flag.Parse()
-	domains := make(chan string, 100)
+	domains := make(chan string, *threads)
 	results := make(chan string)
 
 	for i := 0; i < cap(domains); i++ {
@@ -61,14 +64,18 @@ func main() {
 		}
 	}()
 
-	go updateStats()
+	if !*verbose {
+		go updateStats()
+	}
 
 	for i := 0; i < len(qnames); i++ {
 		response := <-results
 
 		if response != "err" {
 			stats.success++
-			// fmt.Printf("%v", response)
+			if *verbose {
+				fmt.Printf("%v", response)
+			}
 		} else {
 			stats.fail++
 		}
