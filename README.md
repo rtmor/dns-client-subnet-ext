@@ -21,7 +21,7 @@ Usage: ./main [options] -ns {nameserver}
         set preferred nameserver (default "8.8.8.8")
   -t int
         number of threads (default 100)
-  -v    enable verbose output of dns queries
+  -v    enable verbose output of dns queries (debug)
 ```
 
 ### example commands
