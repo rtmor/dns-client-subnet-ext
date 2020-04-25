@@ -1,4 +1,4 @@
-# edns-subnet-query
+# dns subnet client
 DNS resolver with & without edns0 client subnet extension
 
 ### operation
