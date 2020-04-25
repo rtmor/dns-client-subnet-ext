@@ -288,29 +288,4 @@ func buildGraph(nameserver string, clientStatus bool, t, c []float64) {
 	defer f.Close()
 	graph.Render(chart.PNG, f)
 
-	// graph := chart.Chart{
-	// 	Title: fmt.Sprintf("DNS Requests/sec\nNameserver:%v\nSubnetClient: %v",
-	// 		nameserver, clientStatus),
-	// 	XAxis: chart.XAxis{
-	// 		Name: "Elapsed Time (sec)",
-	// 	},
-	// 	YAxis: chart.YAxis{
-	// 		Name: "Returned DNS Requests",
-	// 	},
-	// 	Series: []chart.Series{
-	// 		chart.ContinuousSeries{
-	// 			Style: chart.Style{
-	// 				StrokeColor: chart.GetDefaultColor(0).WithAlpha(64),
-	// 				FillColor:   chart.GetDefaultColor(0).WithAlpha(64),
-	// 			},
-	// 			XValues: t,
-	// 			YValues: c,
-	// 		},
-	// 	},
-	// }
-
-	// f, _ := os.Create(fmt.Sprintf("ns-%v_client-%v_%4v.png",
-	// 	nameserver, clientStatus, time.Now().Unix()))
-	// defer f.Close()
-	// graph.Render(chart.PNG, f)
 }
