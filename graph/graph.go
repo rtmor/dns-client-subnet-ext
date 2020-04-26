@@ -10,7 +10,8 @@ import (
 )
 
 // BuildGraph initializes new 2-axis graph
-func BuildGraph(nameserver string, clientStatus bool, t, c []float64, threads, dmnCount int) {
+func BuildGraph(nameserver string, clientStatus bool, t, c []float64,
+	threads, dmnCount int, output string) {
 	mainSeries := chart.ContinuousSeries{
 		Name:    "Rate",
 		XValues: t,
@@ -25,7 +26,7 @@ func BuildGraph(nameserver string, clientStatus bool, t, c []float64, threads, d
 	} // we can optionally set the `WindowSize` property which alters how the moving average is calculated.
 
 	graph := chart.Chart{
-		Title: fmt.Sprintf("%v - [subnet_client: %v, thread_count:%v, domain_list:%v",
+		Title: fmt.Sprintf("%v - +subnet_client: %v, +thread_count:%v, +domain_list:%v",
 			nameserver, clientStatus, threads, dmnCount),
 		TitleStyle: chart.Style{
 			FontSize: 12.0,
@@ -75,9 +76,12 @@ func BuildGraph(nameserver string, clientStatus bool, t, c []float64, threads, d
 		chart.Legend(&graph),
 	}
 
-	outputDir := "data"
+	if _, err := os.Stat(output); os.IsNotExist(err) {
+		os.Mkdir(output, os.ModePerm)
+	}
+
 	f, err := os.Create(fmt.Sprintf("%v/ns-%v_client-%v_%4v.png",
-		outputDir, nameserver, clientStatus, time.Now().Unix()))
+		output, nameserver, clientStatus, time.Now().Unix()))
 	if err != nil {
 		log.Printf("Error writing to file\n%v", err)
 	}

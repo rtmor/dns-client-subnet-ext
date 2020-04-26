@@ -19,6 +19,7 @@ var (
 	nameserver = flag.String("ns", "8.8.8.8", "set preferred nameserver")
 	threads    = flag.Int("t", 100, "number of threads")
 	verbose    = flag.Bool("v", false, "enable verbose output of dns queries (debug)")
+	output     = flag.String("o", "data", "output directory for data graph")
 )
 
 type statistics struct {
@@ -125,10 +126,13 @@ func updateStats(done chan bool) {
 
 func finalStats() {
 	graph.BuildGraph(*nameserver, len(*client) != 0, timeValues,
-		rateValues, *threads, domainCount)
+		rateValues, *threads, domainCount, *output)
 
-	fmt.Printf("\n\nFinal Statistics\nAttempts: %v\nSuccess: %v\nFailed: %v\n\n"+
-		"Avg Rate: %v queries/sec",
+	fmt.Printf("\n\nFinal Statistics\n"+
+		"Attempts:   %v\n"+
+		"Success:    %v\n"+
+		"Failed:     %v\n\n"+
+		"Avg Rate:   %v queries/s",
 		Stats.attempts, Stats.success, Stats.fail, getStatAvg())
 }
 

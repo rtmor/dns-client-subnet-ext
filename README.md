@@ -11,7 +11,7 @@ Program will resolve each domain and report execution time statistics.
 ### usage
 
 ```
-Usage: ./main [options] -ns {nameserver}
+Usage: ./dns-subnet-client [options] -ns {nameserver}
 
   -client string
         set edns client-subnet option
@@ -19,6 +19,8 @@ Usage: ./main [options] -ns {nameserver}
         dns query wordlists file
   -ns string
         set preferred nameserver (default "8.8.8.8")
+  -o string
+        output directory for data graph (default "data")
   -t int
         number of threads (default 100)
   -v    enable verbose output of dns queries (debug)
