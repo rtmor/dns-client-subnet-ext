@@ -29,13 +29,13 @@ Usage: ./main [options] -ns {nameserver}
 **With EDNS0 client subnet extension**
 
 ```
-./main -client {client subnet} -d {domain file} -ns {nameserver}
-./main -client 1.1.1.1 -d domains.txt -ns 8.8.8.8
+./dns-subnet-client -client {client subnet} -d {domain file} -ns {nameserver}
+./dns-subnet-client -client 1.1.1.1 -d domains.txt -ns 8.8.8.8
 ```
 
 **Without EDNS0 client subnet extension**
 
 ```
-./ednsquery -d {domain file} -ns {nameserver}
-./ednsquery -d domains.txt -ns 8.8.8.8
+./dns-subnet-client -d {domain file} -ns {nameserver}
+./dns-subnet-client -d domains.txt -ns 8.8.8.8
 ```
