@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/wcharczuk/go-chart"
+	"github.com/rtmoranorg/dns-subnet-client/graph"
 )
 
 var (
@@ -90,9 +90,11 @@ func main() {
 	}
 
 	done <- true
+
 	defer close(domains)
 	defer close(results)
 	defer close(done)
+
 	finalStats()
 }
 
@@ -102,7 +104,7 @@ func makeRequest(domains, results chan string) {
 
 		r, err := dns.Exchange(msg, fmt.Sprintf("%v:53", *nameserver))
 		if err != nil {
-			results <- fmt.Sprintf("err")
+			results <- "err"
 			continue
 		}
 		results <- r.String()
@@ -119,7 +121,7 @@ func getDomains() ([]string, error) {
 
 	f, err := os.Open(*domainlist)
 	if err != nil {
-		return nil, fmt.Errorf("Domain file not provided")
+		return nil, fmt.Errorf("Failed to open domain file")
 	}
 
 	defer f.Close()
@@ -138,17 +140,6 @@ func getDomains() ([]string, error) {
 func updateStats(done chan bool) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 
-	go func(done chan bool) {
-		for {
-			select {
-			case <-done:
-				return
-			default:
-				fmt.Printf("\033[2K\rRate: %v queries/sec", getStatAvg())
-			}
-		}
-	}(done)
-
 	for {
 		select {
 		case <-done:
@@ -156,13 +147,15 @@ func updateStats(done chan bool) {
 		case <-ticker.C:
 			timeValues = append(timeValues, float64(time.Since(StartTime).Seconds()))
 			rateValues = append(rateValues, getStatAvg())
+		default:
+			fmt.Printf("\033[2K\rRate: %v queries/sec", getStatAvg())
 		}
 
 	}
 }
 
 func finalStats() {
-	buildGraph(*nameserver, len(*client) != 0, timeValues, rateValues)
+	BuildGraph(*nameserver, len(*client) != 0, timeValues, rateValues)
 
 	fmt.Printf("\n\nStats\nAttempts: %v\nSuccess: %v\nFailed: %v\n\n"+
 		"Avg Rate: %v queries/sec",
@@ -222,70 +215,78 @@ func setupOptions() *dns.OPT {
 	return o
 }
 
-func buildGraph(nameserver string, clientStatus bool, t, c []float64) {
-	mainSeries := chart.ContinuousSeries{
-		Name:    "Rate",
-		XValues: t,
-		YValues: c,
-	}
+// func buildGraph(nameserver string, clientStatus bool, t, c []float64) {
+// 	mainSeries := chart.ContinuousSeries{
+// 		Name:    "Rate",
+// 		XValues: t,
+// 		YValues: c,
+// 	}
 
-	// note we create a SimpleMovingAverage series by assignin the inner series.
-	// we need to use a reference because `.Render()` needs to modify state within the series.
-	smaSeries := &chart.SMASeries{
-		Name:        "Average Rate",
-		InnerSeries: mainSeries,
-	} // we can optionally set the `WindowSize` property which alters how the moving average is calculated.
+// 	// note we create a SimpleMovingAverage series by assignin the inner series.
+// 	// we need to use a reference because `.Render()` needs to modify state within the series.
+// 	smaSeries := &chart.SMASeries{
+// 		Name:        "Average Rate",
+// 		InnerSeries: mainSeries,
+// 	} // we can optionally set the `WindowSize` property which alters how the moving average is calculated.
 
-	graph := chart.Chart{
-		Title: fmt.Sprintf("Nameserver:%v - SubnetClient: %v",
-			nameserver, clientStatus),
-		TitleStyle: chart.Style{
-			FontSize: 14.0,
-			Padding: chart.Box{
-				Bottom: 30,
-			},
-		},
-		Canvas: chart.Style{
-			Padding: chart.Box{
-				Top:    60,
-				Bottom: 30,
-				Left:   30,
-				Right:  30,
-			},
-		},
-		XAxis: chart.XAxis{
-			Name: "Elapsed Time (sec)",
-			Range: &chart.ContinuousRange{
-				Min: 0.0,
-				Max: t[len(t)-1],
-			},
-		},
-		YAxis: chart.YAxis{
-			Name: "Query Return Rate/Sec",
-			Range: &chart.ContinuousRange{
-				Min: 0.0,
-				// Max: c[len(c)-1],
-			},
-		},
-		Series: []chart.Series{
-			mainSeries,
-			smaSeries,
-			chart.ContinuousSeries{
-				Style: chart.Style{
-					StrokeColor: chart.GetDefaultColor(0).WithAlpha(64),
-					FillColor:   chart.GetDefaultColor(0).WithAlpha(64),
-				},
-			},
-		},
-	}
+// 	graph := chart.Chart{
+// 		Title: fmt.Sprintf("Nameserver:%v - SubnetClient: %v",
+// 			nameserver, clientStatus),
+// 		TitleStyle: chart.Style{
+// 			FontSize: 14.0,
+// 			Padding: chart.Box{
+// 				Bottom: 30,
+// 				IsSet:  true,
+// 			},
+// 		},
+// 		Height: 600,
+// 		Canvas: chart.Style{
+// 			Padding: chart.Box{
+// 				Top:    60,
+// 				Bottom: 30,
+// 				Left:   30,
+// 				Right:  30,
+// 				IsSet:  true,
+// 			},
+// 		},
+// 		XAxis: chart.XAxis{
+// 			Name: "Elapsed Time (sec)",
+// 			Range: &chart.ContinuousRange{
+// 				Min: 0.0,
+// 				Max: t[len(t)-1],
+// 			},
+// 		},
+// 		YAxis: chart.YAxis{
+// 			Name: "Query Return Rate/Sec",
+// 			Range: &chart.ContinuousRange{
+// 				Min: 0.0,
+// 				// Max: c[len(c)-1],
+// 			},
+// 		},
+// 		Series: []chart.Series{
+// 			mainSeries,
+// 			smaSeries,
+// 			chart.ContinuousSeries{
+// 				Style: chart.Style{
+// 					StrokeColor: chart.GetDefaultColor(0).WithAlpha(64),
+// 					FillColor:   chart.GetDefaultColor(0).WithAlpha(64),
+// 				},
+// 			},
+// 		},
+// 	}
 
-	graph.Elements = []chart.Renderable{
-		chart.Legend(&graph),
-	}
+// 	graph.Elements = []chart.Renderable{
+// 		chart.Legend(&graph),
+// 	}
 
-	f, _ := os.Create(fmt.Sprintf("ns-%v_client-%v_%4v.png",
-		nameserver, clientStatus, time.Now().Unix()))
-	defer f.Close()
-	graph.Render(chart.PNG, f)
+// 	outputDir := "data"
+// 	f, err := os.Create(fmt.Sprintf("%v/ns-%v_client-%v_%4v.png",
+// 		outputDir, nameserver, clientStatus, time.Now().Unix()))
+// 	if err != nil {
+// 		log.Printf("Error writing to file\n%v", err)
+// 	}
 
-}
+// 	defer f.Close()
+// 	graph.Render(chart.PNG, f)
+
+// }
