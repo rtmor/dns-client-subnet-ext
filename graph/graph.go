@@ -26,10 +26,10 @@ func BuildGraph(nameserver string, clientStatus bool, t, c []float64,
 	} // we can optionally set the `WindowSize` property which alters how the moving average is calculated.
 
 	graph := chart.Chart{
-		Title: fmt.Sprintf("%v - +subnet_client: %v, +thread_count:%v, +domain_list:%v",
+		Title: fmt.Sprintf("%v - +subnet_client: %v, +thread_count:%v, +domain_count:%v",
 			nameserver, clientStatus, threads, dmnCount),
 		TitleStyle: chart.Style{
-			FontSize: 12.0,
+			FontSize: 8.0,
 			Padding: chart.Box{
 				Top:    20,
 				Bottom: 30,
@@ -37,6 +37,7 @@ func BuildGraph(nameserver string, clientStatus bool, t, c []float64,
 			},
 		},
 		Height: 400,
+		Width:  650,
 		Canvas: chart.Style{
 			Padding: chart.Box{
 				Top:    60,
