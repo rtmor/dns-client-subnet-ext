@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/rtmoranorg/dns-subnet-client/domain"
 	"github.com/rtmoranorg/dns-subnet-client/graph"
 )
 
@@ -29,9 +29,10 @@ type statistics struct {
 
 // Benchmarks for nameserver domain requests
 var (
-	Stats     statistics
-	StartTime time.Time = time.Now()
-	AvgRate   float64
+	Stats       statistics
+	StartTime   time.Time = time.Now()
+	AvgRate     float64
+	domainCount int
 )
 
 var (
@@ -40,16 +41,8 @@ var (
 )
 
 func main() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] -ns {nameserver}\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-
-	flag.Parse()
-	if *domainlist == "" {
-		flag.Usage()
-		os.Exit(1)
-	}
+	checkFlags()
+	getBanner()
 
 	domains := make(chan string, *threads)
 	results := make(chan string)
@@ -59,11 +52,12 @@ func main() {
 		go makeRequest(domains, results)
 	}
 
-	qnames, err := getDomains()
+	qnames, err := domain.GetDomains(*domainlist)
 	if err != nil {
 		log.Fatalf("%v", err)
 		os.Exit(1)
 	}
+	domainCount = len(qnames)
 
 	go func() {
 		for _, q := range qnames {
@@ -112,31 +106,6 @@ func makeRequest(domains, results chan string) {
 
 }
 
-func getDomains() ([]string, error) {
-	var qname []string
-
-	if *domainlist == "" {
-		return nil, fmt.Errorf("Domain file not provided")
-	}
-
-	f, err := os.Open(*domainlist)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to open domain file")
-	}
-
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		qname = append(qname, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-		return nil, fmt.Errorf("%v", err)
-	}
-	return qname, err
-}
-
 func updateStats(done chan bool) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 
@@ -148,16 +117,17 @@ func updateStats(done chan bool) {
 			timeValues = append(timeValues, float64(time.Since(StartTime).Seconds()))
 			rateValues = append(rateValues, getStatAvg())
 		default:
-			fmt.Printf("\033[2K\rRate: %v queries/sec", getStatAvg())
+			fmt.Printf("\033[2K\rRate: %.4f queries/s", getStatAvg())
 		}
 
 	}
 }
 
 func finalStats() {
-	BuildGraph(*nameserver, len(*client) != 0, timeValues, rateValues)
+	graph.BuildGraph(*nameserver, len(*client) != 0, timeValues,
+		rateValues, *threads, domainCount)
 
-	fmt.Printf("\n\nStats\nAttempts: %v\nSuccess: %v\nFailed: %v\n\n"+
+	fmt.Printf("\n\nFinal Statistics\nAttempts: %v\nSuccess: %v\nFailed: %v\n\n"+
 		"Avg Rate: %v queries/sec",
 		Stats.attempts, Stats.success, Stats.fail, getStatAvg())
 }
@@ -215,78 +185,23 @@ func setupOptions() *dns.OPT {
 	return o
 }
 
-// func buildGraph(nameserver string, clientStatus bool, t, c []float64) {
-// 	mainSeries := chart.ContinuousSeries{
-// 		Name:    "Rate",
-// 		XValues: t,
-// 		YValues: c,
-// 	}
+func checkFlags() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] -ns {nameserver}\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 
-// 	// note we create a SimpleMovingAverage series by assignin the inner series.
-// 	// we need to use a reference because `.Render()` needs to modify state within the series.
-// 	smaSeries := &chart.SMASeries{
-// 		Name:        "Average Rate",
-// 		InnerSeries: mainSeries,
-// 	} // we can optionally set the `WindowSize` property which alters how the moving average is calculated.
+	flag.Parse()
+	if *domainlist == "" {
+		flag.Usage()
+		os.Exit(1)
+	}
+}
 
-// 	graph := chart.Chart{
-// 		Title: fmt.Sprintf("Nameserver:%v - SubnetClient: %v",
-// 			nameserver, clientStatus),
-// 		TitleStyle: chart.Style{
-// 			FontSize: 14.0,
-// 			Padding: chart.Box{
-// 				Bottom: 30,
-// 				IsSet:  true,
-// 			},
-// 		},
-// 		Height: 600,
-// 		Canvas: chart.Style{
-// 			Padding: chart.Box{
-// 				Top:    60,
-// 				Bottom: 30,
-// 				Left:   30,
-// 				Right:  30,
-// 				IsSet:  true,
-// 			},
-// 		},
-// 		XAxis: chart.XAxis{
-// 			Name: "Elapsed Time (sec)",
-// 			Range: &chart.ContinuousRange{
-// 				Min: 0.0,
-// 				Max: t[len(t)-1],
-// 			},
-// 		},
-// 		YAxis: chart.YAxis{
-// 			Name: "Query Return Rate/Sec",
-// 			Range: &chart.ContinuousRange{
-// 				Min: 0.0,
-// 				// Max: c[len(c)-1],
-// 			},
-// 		},
-// 		Series: []chart.Series{
-// 			mainSeries,
-// 			smaSeries,
-// 			chart.ContinuousSeries{
-// 				Style: chart.Style{
-// 					StrokeColor: chart.GetDefaultColor(0).WithAlpha(64),
-// 					FillColor:   chart.GetDefaultColor(0).WithAlpha(64),
-// 				},
-// 			},
-// 		},
-// 	}
-
-// 	graph.Elements = []chart.Renderable{
-// 		chart.Legend(&graph),
-// 	}
-
-// 	outputDir := "data"
-// 	f, err := os.Create(fmt.Sprintf("%v/ns-%v_client-%v_%4v.png",
-// 		outputDir, nameserver, clientStatus, time.Now().Unix()))
-// 	if err != nil {
-// 		log.Printf("Error writing to file\n%v", err)
-// 	}
-
-// 	defer f.Close()
-// 	graph.Render(chart.PNG, f)
-
-// }
+func getBanner() {
+	fmt.Printf("DNS Resolver Subnet Client Test\n"+
+		"[+] Nameserver:    %v\n"+
+		"[+] Subnet Client: %v\n"+
+		"[+] Thread Count:  %v\n\n",
+		*nameserver, *client, *threads)
+}
