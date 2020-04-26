@@ -30,9 +30,9 @@ type statistics struct {
 
 // Benchmarks for nameserver domain requests
 var (
-	Stats       statistics
-	StartTime   time.Time = time.Now()
-	AvgRate     float64
+	stats       statistics
+	startTime   time.Time = time.Now()
+	avgRate     float64
 	domainCount int
 )
 
@@ -43,7 +43,6 @@ var (
 
 func main() {
 	checkFlags()
-	getBanner()
 
 	domains := make(chan string, *threads)
 	results := make(chan string)
@@ -62,7 +61,7 @@ func main() {
 
 	go func() {
 		for _, q := range qnames {
-			Stats.attempts++
+			stats.attempts++
 			domains <- q
 		}
 	}()
@@ -75,12 +74,12 @@ func main() {
 		response := <-results
 
 		if response != "err" {
-			Stats.success++
+			stats.success++
 			if *verbose {
 				fmt.Printf("%v", response)
 			}
 		} else {
-			Stats.fail++
+			stats.fail++
 		}
 	}
 
@@ -115,7 +114,7 @@ func updateStats(done chan bool) {
 		case <-done:
 			return
 		case <-ticker.C:
-			timeValues = append(timeValues, float64(time.Since(StartTime).Seconds()))
+			timeValues = append(timeValues, float64(time.Since(startTime).Seconds()))
 			rateValues = append(rateValues, getStatAvg())
 		default:
 			fmt.Printf("\033[2K\rRate: %.4f queries/s", getStatAvg())
@@ -125,23 +124,25 @@ func updateStats(done chan bool) {
 }
 
 func finalStats() {
-	graph.BuildGraph(*nameserver, len(*client) != 0, timeValues,
-		rateValues, *threads, domainCount, *output)
+	graph.BuildGraph(*nameserver, *client, len(*client) != 0,
+		&timeValues, &rateValues, *threads, domainCount, *output)
 
 	fmt.Printf("\n\nFinal Statistics\n"+
-		"Attempts:   %v\n"+
-		"Success:    %v\n"+
-		"Failed:     %v\n\n"+
-		"Avg Rate:   %v queries/s",
-		Stats.attempts, Stats.success, Stats.fail, getStatAvg())
+		"[+] Attempts:      %v\n"+
+		"[+] Success:       %v\n"+
+		"[+] Failed:        %v\n"+
+		"[+] Avg Rate:      %.4f queries/s\n"+
+		"[+] Elapsed Time:  %.4f seconds",
+		stats.attempts, stats.success, stats.fail,
+		getStatAvg(), float64(time.Since(startTime).Seconds()))
 }
 
 func getStatAvg() float64 {
-	runTime := float64(time.Since(StartTime).Seconds())
-	successCount := float64(Stats.success)
+	runTime := float64(time.Since(startTime).Seconds())
+	successCount := float64(stats.success)
 	successRate := successCount / runTime
 
-	AvgRate += successRate
+	avgRate += successRate
 
 	return successRate
 }
@@ -200,6 +201,8 @@ func checkFlags() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	getBanner()
 }
 
 func getBanner() {

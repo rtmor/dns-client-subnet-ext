@@ -10,29 +10,28 @@ import (
 )
 
 // BuildGraph initializes new 2-axis graph
-func BuildGraph(nameserver string, clientStatus bool, t, c []float64,
-	threads, dmnCount int, output string) {
+func BuildGraph(nameserver, client string, clientStatus bool,
+	t, c *[]float64, threads, dmnCount int, output string) {
 	mainSeries := chart.ContinuousSeries{
 		Name:    "Rate",
-		XValues: t,
-		YValues: c,
+		XValues: *t,
+		YValues: *c,
 	}
 
-	// note we create a SimpleMovingAverage series by assignin the inner series.
-	// we need to use a reference because `.Render()` needs to modify state within the series.
 	smaSeries := &chart.SMASeries{
 		Name:        "Average Rate",
 		InnerSeries: mainSeries,
-	} // we can optionally set the `WindowSize` property which alters how the moving average is calculated.
+	}
 
 	graph := chart.Chart{
-		Title: fmt.Sprintf("%v - +subnet_client: %v, +thread_count:%v, +domain_count:%v",
-			nameserver, clientStatus, threads, dmnCount),
+		Title: fmt.Sprintf("ns:%v - subnet_client: %v %v | thread_count:%v | domain_count:%v",
+			nameserver, clientStatus, client, threads, dmnCount),
 		TitleStyle: chart.Style{
 			FontSize: 8.0,
 			Padding: chart.Box{
 				Top:    20,
 				Bottom: 30,
+				Left:   95,
 				IsSet:  true,
 			},
 		},
@@ -51,14 +50,12 @@ func BuildGraph(nameserver string, clientStatus bool, t, c []float64,
 			Name: "Elapsed Time (sec)",
 			Range: &chart.ContinuousRange{
 				Min: 0.0,
-				Max: t[len(t)-1],
 			},
 		},
 		YAxis: chart.YAxis{
-			Name: "Query Return Rate/Sec",
+			Name: "Successful Queries/sec",
 			Range: &chart.ContinuousRange{
 				Min: 0.0,
-				// Max: c[len(c)-1],
 			},
 		},
 		Series: []chart.Series{
@@ -89,5 +86,4 @@ func BuildGraph(nameserver string, clientStatus bool, t, c []float64,
 
 	defer f.Close()
 	graph.Render(chart.PNG, f)
-
 }
