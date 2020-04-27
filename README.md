@@ -1,6 +1,6 @@
-# dns subnet client
+# dns client subnet ext
 
-DNS resolver with & without edns0 client subnet extension for statistic gathering.
+DNS client tool for evaluating edns0 client subnet extension for statistic gathering.
 
 ### operation
 
@@ -11,7 +11,7 @@ Program will resolve each domain and report execution time statistics with graph
 ### usage
 
 ```
-Usage: ./dns-subnet-client [options] -ns {nameserver}
+Usage: ./dns-client-subnet-ext [options] -ns {nameserver}
 
   -client string
         set edns client-subnet option
@@ -31,13 +31,13 @@ Usage: ./dns-subnet-client [options] -ns {nameserver}
 **With EDNS0 client subnet extension**
 
 ```
-./dns-subnet-client -client {client subnet} -d {domain file} -ns {nameserver}
-./dns-subnet-client -client 1.1.1.1 -d domains.txt -ns 8.8.8.8
+./dns-client-subnet-ext -client {client subnet} -d {domain file} -ns {nameserver}
+./dns-client-subnet-ext 1.1.1.1 -d domains.txt -ns 8.8.8.8
 ```
 
 **Without EDNS0 client subnet extension**
 
 ```
-./dns-subnet-client -d {domain file} -ns {nameserver}
-./dns-subnet-client -d domains.txt -ns 8.8.8.8
+./dns-client-subnet-ext -d {domain file} -ns {nameserver}
+./dns-client-subnet-ext -d domains.txt -ns 8.8.8.8
 ```

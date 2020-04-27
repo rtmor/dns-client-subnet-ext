@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-	"github.com/rtmoranorg/dns-subnet-client/domain"
-	"github.com/rtmoranorg/dns-subnet-client/graph"
+	"github.com/rtmoranorg/dns-client-subnet-ext/domain"
+	"github.com/rtmoranorg/dns-client-subnet-ext/graph"
 )
 
 var (
