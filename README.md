@@ -6,7 +6,7 @@ DNS resolver with & without edns0 client subnet extension for statistic gatherin
 
 Populate domain query file deliminated by newlines.
 
-Program will resolve each domain and report execution time statistics.
+Program will resolve each domain and report execution time statistics with graph.
 
 ### usage
 
