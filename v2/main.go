@@ -66,17 +66,17 @@ func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
 
 var (
 	sendingDelay time.Duration
-	retryDelay time.Duration
+	retryDelay   time.Duration
 )
 
 var (
-	concurrency int
-	dnsServer string
+	concurrency      int
+	dnsServer        string
 	packetsPerSecond int
-	retryTime string
-	verbose bool
-	domainList string
-	client string
+	retryTime        string
+	verbose          bool
+	domainList       string
+	client           string
 )
 
 func init() {
@@ -90,8 +90,6 @@ func init() {
 		"Resend unanswered query after RETRY")
 	flag.BoolVar(&verbose, "v", false,
 		"Verbose logging")
-	flag.BoolVar(&ipv6, "6", false,
-		"Ipv6 - ask for AAAA, not A")
 	flag.StringVar(&domainList, "d", "", "location of domain list file")
 	flag.StringVar(&client, "c", "", "client subnet address")
 }
@@ -290,12 +288,7 @@ func writeRequest(c net.Conn, tryResolving <-chan *domainRecord) {
 	for {
 		dr := <-tryResolving
 
-		var t uint16
-		if !ipv6 {
-			t = dns.TypeA
-		} else {
-			t = dns.TypeAAAA
-		}
+		t := dns.TypeA
 		msg := buildQuery(dr.id, dr.domain, t, dns.ClassINET)
 
 		_, err := c.Write(msg)
