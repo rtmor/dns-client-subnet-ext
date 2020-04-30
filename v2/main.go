@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -27,20 +26,34 @@ type domainAnswer struct {
 	ips    []net.IP
 }
 
+type statistics struct {
+	attempts int
+	success  int
+	fail     int
+}
+
 var (
 	sendingDelay time.Duration
 	retryDelay   time.Duration
 )
 
 var (
+	tInitial time.Time = time.Now()
+	avgRate  float64
+	tCount   int
+	stats    statistics
+)
+
+var (
 	dnsServer        = flag.String("server", "8.8.8.8:53", "DNS server address (ip:port)")
 	concurrency      = flag.Int("concurrency", 1000, "Internal buffer")
 	packetsPerSecond = flag.Int("pps", 2000, "Send up to PPS DNS queries per second")
-	retryTime        = flag.String("retry", "1s", "Resend unanswered query after RETRY")
+	retryTime        = flag.String("retryrate", "1s", "Resend unanswered query after RETRY")
 	verbose          = flag.Bool("v", false, "Verbose logging")
 	domainList       = flag.String("d", "", "location of domain list file")
 	client           = flag.String("c", "", "client subnet address")
 	outputDir        = flag.String("o", "output", "Location of output directory")
+	retryCount       = flag.Int("retries", 3, "number of attempts made to resolve a domain")
 )
 
 func main() {
@@ -79,48 +92,54 @@ func main() {
 	resolved := make(chan *domainAnswer, *concurrency)
 	tryResolving := make(chan *domainRecord, *concurrency)
 
-	go doTimeouter(timeoutRegister, timeoutExpired)
+	go getTimeout(timeoutRegister, timeoutExpired)
 
 	go writeRequest(c, tryResolving)
 	go readRequest(c, resolved)
 
 	t0 := time.Now()
-	domainsCount, avgTries := doMapGuard(domains, domainSlotAvailable,
+	tCount, avgTries := doMapGuard(domains, domainSlotAvailable,
 		timeoutRegister, timeoutExpired,
 		tryResolving, resolved)
 	td := time.Now().Sub(t0)
 	fmt.Fprintf(os.Stderr, "Resolved %d domains in %.3fs. Average retries %.3f. Domains per second: %.3f\n",
-		domainsCount,
+		tCount,
 		td.Seconds(),
 		avgTries,
-		float64(domainsCount)/td.Seconds())
+		float64(tCount)/td.Seconds())
 }
 
 func checkFlags() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, strings.Join([]string{
-			"\"resolve\" mass resolve DNS A records for domains names read from stdin.",
-			"",
-			"Usage: resolve [option ...]",
-			"",
-		}, "\n"))
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] -ns {nameserver}\n", os.Args[0])
 		flag.PrintDefaults()
 	}
+	flag.Parse()
 
 	if *domainList == "" {
 		fmt.Println("Missing required domain list")
-		flag.PrintDefaults()
+		flag.Usage()
+		os.Exit(1)
 	}
-
-	flag.Parse()
 
 	if flag.NArg() != 0 {
 		flag.Usage()
 		os.Exit(1)
 	}
+
+	getBanner()
 }
 
-func doMapGuard(domains <-chan string,
+func getBanner() {
+	fmt.Printf("DNS Resolver Subnet Client Test\n"+
+		"[+] Nameserver:    %v\n"+
+		"[+] Subnet Client: %v\n"+
+		"[+] Thread Count:  %v\n\n",
+		*dnsServer, *client, *concurrency)
+}
+
+func doMapGuard(
+	domains <-chan string,
 	domainSlotAvailable chan<- bool,
 	timeoutRegister chan<- *domainRecord,
 	timeoutExpired <-chan *domainRecord,
@@ -132,7 +151,7 @@ func doMapGuard(domains <-chan string,
 	done := false
 
 	sumTries := 0
-	domainCount := 0
+	tCount = 0
 
 	for done == false || len(m) > 0 {
 		select {
@@ -159,6 +178,16 @@ func doMapGuard(domains <-chan string,
 
 		case dr := <-timeoutExpired:
 			if m[dr.id] == dr {
+				if dr.resend == *retryCount {
+					delete(m, dr.id)
+					stats.fail++
+
+					if *verbose {
+						fmt.Fprintf(os.Stderr, "0x%04x resend (FAILED: exceed 3 attempts) %s\n", dr.id,
+							dr.domain)
+					}
+					continue
+				}
 				dr.resend++
 				dr.timeout = time.Now()
 				if *verbose {
@@ -192,21 +221,22 @@ func doMapGuard(domains <-chan string,
 				sort.Sort(sort.StringSlice(s))
 
 				// without trailing dot
-				domain := dr.domain[:len(dr.domain)-1]
-				fmt.Printf("%s, %s\n", domain, strings.Join(s, " "))
+				// domain := dr.domain[:len(dr.domain)-1]
+				// fmt.Printf("%s, %s\n", domain, strings.Join(s, " "))
+				fmt.Printf("\033[2K\rRate: %.4f queries/s", getStatAvg())
 
 				sumTries += dr.resend
-				domainCount++
+				tCount++
 
 				delete(m, dr.id)
 				domainSlotAvailable <- true
 			}
 		}
 	}
-	return domainCount, float64(sumTries) / float64(domainCount)
+	return tCount, float64(sumTries) / float64(tCount)
 }
 
-func doTimeouter(timeoutRegister <-chan *domainRecord,
+func getTimeout(timeoutRegister <-chan *domainRecord,
 	timeoutExpired chan<- *domainRecord) {
 	for {
 		dr := <-timeoutRegister
@@ -306,6 +336,16 @@ func setupOptions() *dns.OPT {
 	o.Option = append(o.Option, e)
 
 	return o
+}
+
+func getStatAvg() float64 {
+	runTime := float64(time.Since(tInitial).Seconds())
+	successCount := float64(tCount)
+	successRate := successCount / runTime
+
+	avgRate += successRate
+
+	return successRate
 }
 
 // GetDomains returns string slice of domains within specified file

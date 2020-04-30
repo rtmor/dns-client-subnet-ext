@@ -1,4 +1,4 @@
-module github.com/rtmoranorg/dns-client-subnet-ext v2.0.0
+module github.com/rtmoranorg/dns-client-subnet-ext
 
 go 1.14
 
