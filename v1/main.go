@@ -41,15 +41,27 @@ var (
 	timeValues = []float64{0}
 )
 
+var pipe chan *dns.Conn
+
 func main() {
 	checkFlags()
 
 	domains := make(chan string, *threads)
-	results := make(chan string)
 	done := make(chan bool)
+	pipe = make(chan *dns.Conn)
+	c := new(dns.Client)
+	conn, err := c.Dial(fmt.Sprintf("%v:53", *nameserver))
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
+	defer conn.Close()
+	defer close(domains)
+	defer close(pipe)
+	defer close(done)
 
 	for i := 0; i < cap(domains); i++ {
-		go makeRequest(domains, results)
+		go makeRequest(conn, c, domains)
 	}
 
 	qnames, err := domain.GetDomains(*domainlist)
@@ -71,39 +83,43 @@ func main() {
 	}
 
 	for i := 0; i < len(qnames); i++ {
-		response := <-results
-
-		if response != "err" {
-			stats.success++
-			if *verbose {
-				fmt.Printf("%v", response)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		select {
+		case response := <-pipe:
+			msg, err := response.ReadMsg()
+			if err != nil {
+				stats.fail++
+			} else {
+				stats.success++
+				if *verbose {
+					fmt.Printf("%v", msg)
+				}
 			}
-		} else {
-			stats.fail++
+		case <-ticker.C:
+			close(pipe)
+			done <- true
+			break
 		}
 	}
-
-	done <- true
-
-	defer close(domains)
-	defer close(results)
-	defer close(done)
-
 	finalStats()
 }
 
-func makeRequest(domains, results chan string) {
+func makeRequest(conn *dns.Conn, c *dns.Client, domains chan string) {
 	for d := range domains {
 		msg := buildQuery(dns.Id(), d, dns.TypeA, dns.ClassINET)
 
-		r, err := dns.Exchange(msg, fmt.Sprintf("%v:53", *nameserver))
-		if err != nil {
-			results <- "err"
-			continue
+		opt := msg.IsEdns0()
+		if opt != nil && opt.UDPSize() >= dns.MinMsgSize {
+			conn.UDPSize = opt.UDPSize()
 		}
-		results <- r.String()
-	}
 
+		if err := conn.WriteMsg(msg); err != nil {
+			stats.fail++
+			log.Printf("%v", err)
+		}
+		pipe <- conn
+	}
+	close(pipe)
 }
 
 func updateStats(done chan bool) {
@@ -180,10 +196,12 @@ func setupOptions() *dns.OPT {
 		},
 	}
 	e := &dns.EDNS0_SUBNET{
-		Code:          dns.EDNS0SUBNET,
-		Address:       net.ParseIP(*client),
-		Family:        1, // IP4
-		SourceNetmask: net.IPv4len * 8,
+		Code:    dns.EDNS0SUBNET,
+		Address: net.ParseIP(*client).To4(),
+		Family:  1, // IP4
+		// SourceNetmask: net.IPv4len * 8,
+		SourceNetmask: 0,
+		SourceScope:   0,
 	}
 	o.Option = append(o.Option, e)
 
