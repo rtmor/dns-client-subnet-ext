@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math/rand"
 	"net"
 	"os"
 	"sort"
@@ -15,53 +14,17 @@ import (
 	"github.com/miekg/dns"
 )
 
-// GetDomains returns string slice of domains within specified file
-func GetDomains(n string) ([]string, error) {
-	var qname []string
-
-	if n == "" {
-		return nil, fmt.Errorf("Domain file not provided")
-	}
-
-	f, err := os.Open(n)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to open domain file")
-	}
-
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		qname = append(qname, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-		return nil, fmt.Errorf("%v", err)
-	}
-
-	return qname, err
+type domainRecord struct {
+	id      uint16
+	domain  string
+	timeout time.Time
+	resend  int
 }
 
-func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
-	i := 0
-	in, err := GetDomains(domainList)
-	domainLength := len(in)
-	if err != nil {
-		fmt.Printf("%v", err)
-	}
-
-	for range domainSlotAvailable {
-
-		if i == domainLength-1 {
-			break
-		}
-
-		domain := in[i] + "."
-
-		domains <- domain
-		i++
-	}
-	close(domains)
+type domainAnswer struct {
+	id     uint16
+	domain string
+	ips    []net.IP
 }
 
 var (
@@ -70,65 +33,51 @@ var (
 )
 
 var (
-	concurrency      int
-	dnsServer        string
-	packetsPerSecond int
-	retryTime        string
-	verbose          bool
-	domainList       string
-	client           string
+	dnsServer        = flag.String("server", "8.8.8.8:53", "DNS server address (ip:port)")
+	concurrency      = flag.Int("concurrency", 1000, "Internal buffer")
+	packetsPerSecond = flag.Int("pps", 2000, "Send up to PPS DNS queries per second")
+	retryTime        = flag.String("retry", "1s", "Resend unanswered query after RETRY")
+	verbose          = flag.Bool("v", false, "Verbose logging")
+	domainList       = flag.String("d", "", "location of domain list file")
+	client           = flag.String("c", "", "client subnet address")
+	outputDir        = flag.String("o", "output", "Location of output directory")
 )
-
-func init() {
-	flag.StringVar(&dnsServer, "server", "8.8.8.8:53",
-		"DNS server address (ip:port)")
-	flag.IntVar(&concurrency, "concurrency", 1000,
-		"Internal buffer")
-	flag.IntVar(&packetsPerSecond, "pps", 2000,
-		"Send up to PPS DNS queries per second")
-	flag.StringVar(&retryTime, "retry", "1s",
-		"Resend unanswered query after RETRY")
-	flag.BoolVar(&verbose, "v", false,
-		"Verbose logging")
-	flag.StringVar(&domainList, "d", "", "location of domain list file")
-	flag.StringVar(&client, "c", "", "client subnet address")
-}
 
 func main() {
 	checkFlags()
 
-	sendingDelay = time.Duration(1000000000/packetsPerSecond) * time.Nanosecond
+	sendingDelay = time.Duration(1000000000/(*packetsPerSecond)) * time.Nanosecond
 	var err error
-	retryDelay, err = time.ParseDuration(retryTime)
+	retryDelay, err = time.ParseDuration(*retryTime)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't parse duration %s\n", retryTime)
+		fmt.Fprintf(os.Stderr, "Can't parse duration %s\n", *retryTime)
 		os.Exit(1)
 	}
 
 	fmt.Fprintf(os.Stderr, "Server: %s, sending delay: %s (%d pps), retry delay: %s\n",
-		dnsServer, sendingDelay, packetsPerSecond, retryDelay)
+		*dnsServer, sendingDelay, *packetsPerSecond, retryDelay)
 
-	domains := make(chan string, concurrency)
-	domainSlotAvailable := make(chan bool, concurrency)
+	domains := make(chan string, *concurrency)
+	domainSlotAvailable := make(chan bool, *concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for i := 0; i < *concurrency; i++ {
 		domainSlotAvailable <- true
 	}
 
 	go readDomains(domains, domainSlotAvailable)
 
-	c, err := net.Dial("udp", dnsServer)
+	c, err := net.Dial("udp", *dnsServer)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bind(udp, %s): %s\n", dnsServer, err)
+		fmt.Fprintf(os.Stderr, "bind(udp, %s): %s\n", *dnsServer, err)
 		os.Exit(1)
 	}
 
 	// Used as a queue. Make sure it has plenty of storage available.
-	timeoutRegister := make(chan *domainRecord, concurrency*1000)
+	timeoutRegister := make(chan *domainRecord, *concurrency*1000)
 	timeoutExpired := make(chan *domainRecord)
 
-	resolved := make(chan *domainAnswer, concurrency)
-	tryResolving := make(chan *domainRecord, concurrency)
+	resolved := make(chan *domainAnswer, *concurrency)
+	tryResolving := make(chan *domainRecord, *concurrency)
 
 	go doTimeouter(timeoutRegister, timeoutExpired)
 
@@ -158,7 +107,7 @@ func checkFlags() {
 		flag.PrintDefaults()
 	}
 
-	if domainList == "" {
+	if *domainList == "" {
 		fmt.Println("Missing required domain list")
 		flag.PrintDefaults()
 	}
@@ -169,19 +118,6 @@ func checkFlags() {
 		flag.Usage()
 		os.Exit(1)
 	}
-}
-
-type domainRecord struct {
-	id      uint16
-	domain  string
-	timeout time.Time
-	resend  int
-}
-
-type domainAnswer struct {
-	id     uint16
-	domain string
-	ips    []net.IP
 }
 
 func doMapGuard(domains <-chan string,
@@ -208,14 +144,14 @@ func doMapGuard(domains <-chan string,
 			}
 			var id uint16
 			for {
-				id = uint16(rand.Int())
+				id = dns.Id()
 				if id != 0 && m[id] == nil {
 					break
 				}
 			}
 			dr := &domainRecord{id, domain, time.Now(), 1}
 			m[id] = dr
-			if verbose {
+			if *verbose {
 				fmt.Fprintf(os.Stderr, "0x%04x resolving %s\n", id, domain)
 			}
 			timeoutRegister <- dr
@@ -225,7 +161,7 @@ func doMapGuard(domains <-chan string,
 			if m[dr.id] == dr {
 				dr.resend++
 				dr.timeout = time.Now()
-				if verbose {
+				if *verbose {
 					fmt.Fprintf(os.Stderr, "0x%04x resend (try:%d) %s\n", dr.id,
 						dr.resend, dr.domain)
 				}
@@ -237,14 +173,14 @@ func doMapGuard(domains <-chan string,
 			if m[da.id] != nil {
 				dr := m[da.id]
 				if dr.domain != da.domain {
-					if verbose {
+					if *verbose {
 						fmt.Fprintf(os.Stderr, "0x%04x error, unrecognized domain: %s != %s\n",
 							da.id, dr.domain, da.domain)
 					}
 					break
 				}
 
-				if verbose {
+				if *verbose {
 					fmt.Fprintf(os.Stderr, "0x%04x resolved %s\n",
 						dr.id, dr.domain)
 				}
@@ -344,7 +280,7 @@ func buildQuery(id uint16, name string, qtype uint16, qclass uint16) []byte {
 		Qclass: qclass,
 	}
 
-	if client != "" {
+	if *client != "" {
 		m.Extra = append(m.Extra, setupOptions())
 	}
 
@@ -361,7 +297,7 @@ func setupOptions() *dns.OPT {
 	}
 	e := &dns.EDNS0_SUBNET{
 		Code:    dns.EDNS0SUBNET,
-		Address: net.ParseIP(client).To4(),
+		Address: net.ParseIP(*client).To4(),
 		Family:  1, // IP4
 		// SourceNetmask: net.IPv4len * 8,
 		SourceNetmask: 0,
@@ -372,35 +308,51 @@ func setupOptions() *dns.OPT {
 	return o
 }
 
-// func unpackDNS(msg []byte, dnsType uint16) (domain string, id uint16, ips []net.IP) {
-// 	d := new(dns.Msg)
-// 	if err := d.Unpack(msg); err != nil {
-// 		// fmt.Fprintf(os.Stderr, "dns error (unpacking)\n")
-// 		return
-// 	}
+// GetDomains returns string slice of domains within specified file
+func GetDomains(n string) ([]string, error) {
+	var qname []string
 
-// 	id = d.Id
-// 	// id = d.id
+	if n == "" {
+		return nil, fmt.Errorf("Domain file not provided")
+	}
 
-// 	if len(d.Question) < 1 {
-// 		// fmt.Fprintf(os.Stderr, "dns error (wrong question section)\n")
-// 		return
-// 	}
+	f, err := os.Open(n)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to open domain file")
+	}
 
-// 	domain = d.Question[0].Name
-// 	if len(domain) < 1 {
-// 		// fmt.Fprintf(os.Stderr, "dns error (wrong domain in question)\n")
-// 		return
-// 	}
+	defer f.Close()
 
-// 	_, addrs, err := answer(domain, "server", d, dnsType)
-// 	if err == nil {
-// 		switch dnsType {
-// 		case dnsTypeA:
-// 			ips = convertRR_A(addrs)
-// 		case dnsTypeAAAA:
-// 			ips = convertRR_AAAA(addrs)
-// 		}
-// 	}
-// 	return
-// }
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		qname = append(qname, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+		return nil, fmt.Errorf("%v", err)
+	}
+
+	return qname, err
+}
+
+func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
+	i := 0
+	in, err := GetDomains(*domainList)
+	domainLength := len(in)
+	if err != nil {
+		fmt.Printf("%v", err)
+	}
+
+	for range domainSlotAvailable {
+
+		if i == domainLength-1 {
+			break
+		}
+
+		domain := in[i] + "."
+
+		domains <- domain
+		i++
+	}
+	close(domains)
+}
