@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/wcharczuk/go-chart"
@@ -74,9 +75,8 @@ func BuildGraph(nameserver, client string, clientStatus bool,
 		chart.Legend(&graph),
 	}
 
-	if _, err := os.Stat(fmt.Sprintf("%v/%v", output, nameserver)); os.IsNotExist(err) {
-		os.Mkdir(output, os.ModePerm)
-	}
+	newpath := filepath.Join(".", output, nameserver)
+	os.MkdirAll(newpath, os.ModePerm)
 
 	f, err := os.Create(fmt.Sprintf("%v/%v/ns-%v_client-%v_%4v.png",
 		output, nameserver, nameserver, clientStatus, time.Now().Unix()))
