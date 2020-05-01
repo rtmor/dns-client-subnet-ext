@@ -51,7 +51,7 @@ var (
 )
 
 var (
-	dnsServer        = flag.String("ns", "8.8.8.8:53", "DNS server address (ip:port)")
+	dnsServer        = flag.String("ns", "8.8.8.8", "DNS server address (ip)")
 	concurrency      = flag.Int("t", 1000, "Number of concurrent workers")
 	packetsPerSecond = flag.Int("pps", 2000, "Send up to PPS DNS queries per second")
 	retryTime        = flag.String("rr", "1s", "Resend unanswered query after RETRY")
@@ -72,7 +72,7 @@ func main() {
 
 	go readDomains(domains, domainSlotAvailable)
 
-	c, err := net.Dial("udp", *dnsServer)
+	c, err := net.Dial("udp", fmt.Sprintf("%v:53", *dnsServer))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "bind(udp, %s): %s\n", *dnsServer, err)
 		os.Exit(1)
