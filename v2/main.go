@@ -367,7 +367,7 @@ func updateStats(done <-chan bool) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	lastCount := stats.success
 	var deltaCount int
-	var deadStop int = 200
+	var deadStop int = 75
 
 	for {
 		select {
