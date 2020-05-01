@@ -364,10 +364,10 @@ func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
 }
 
 func updateStats(done <-chan bool) {
-	ticker := time.NewTicker(50 * time.Millisecond)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	lastCount := stats.success
 	var deltaCount int
-	var deadStop int = 400
+	var deadStop int = 200
 
 	for {
 		select {
@@ -380,6 +380,7 @@ func updateStats(done <-chan bool) {
 				if deadStop < 1 {
 					graph.BuildGraph(*dnsServer, *client, len(*client) != 0,
 						&timeValues, &rateValues, *concurrency, stats.success, *outputDir)
+					fmt.Println("Requests being decline. Terminating Query.")
 					os.Exit(2)
 				}
 			}
@@ -387,9 +388,9 @@ func updateStats(done <-chan bool) {
 			deltaCount = currentCount - lastCount
 			lastCount = currentCount
 			timeValues = append(timeValues, float64(time.Since(t0).Seconds()))
-			rateValues = append(rateValues, float64(deltaCount*20))
+			rateValues = append(rateValues, float64(deltaCount*10))
 		default:
-			fmt.Printf("\033[2K\rRate: %.4f queries/s", float64(deltaCount*20))
+			fmt.Printf("\033[2K\rRate: %.4f queries/s", float64(deltaCount*10))
 		}
 
 	}
