@@ -51,15 +51,15 @@ var (
 )
 
 var (
-	dnsServer        = flag.String("server", "8.8.8.8:53", "DNS server address (ip:port)")
-	concurrency      = flag.Int("concurrency", 1000, "Internal buffer")
+	dnsServer        = flag.String("ns", "8.8.8.8:53", "DNS server address (ip:port)")
+	concurrency      = flag.Int("t", 1000, "Number of concurrent workers")
 	packetsPerSecond = flag.Int("pps", 2000, "Send up to PPS DNS queries per second")
-	retryTime        = flag.String("retryrate", "1s", "Resend unanswered query after RETRY")
+	retryTime        = flag.String("rr", "1s", "Resend unanswered query after RETRY")
 	verbose          = flag.Bool("v", false, "Verbose logging")
-	domainList       = flag.String("d", "", "location of domain list file")
-	client           = flag.String("c", "", "client subnet address")
-	outputDir        = flag.String("o", "output", "Location of output directory")
-	retryCount       = flag.Int("retries", 3, "number of attempts made to resolve a domain")
+	domainList       = flag.String("d", "", "Location of domain list file")
+	client           = flag.String("c", "", "Client subnet address")
+	outputDir        = flag.String("o", "Output", "Location of output directory")
+	retryCount       = flag.Int("retries", 3, "Number of attempts made to resolve a domain")
 )
 
 func main() {
@@ -100,54 +100,9 @@ func main() {
 		tryResolving, resolved)
 
 	td = time.Now().Sub(t0)
+	done <- true
+
 	finalStats(avgTries)
-}
-
-func init() {
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] -ns {nameserver}\n", os.Args[0])
-		flag.PrintDefaults()
-	}
-	flag.Parse()
-
-	if *domainList == "" {
-		fmt.Println("Missing required domain list")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	if flag.NArg() != 0 {
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	sendingDelay = time.Duration(1000000000/(*packetsPerSecond)) * time.Nanosecond
-	var err error
-	retryDelay, err = time.ParseDuration(*retryTime)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Can't parse duration %s\n", *retryTime)
-		os.Exit(1)
-	}
-
-	var clientSub string
-	if *client == "" {
-		clientSub = "disabled"
-	} else {
-		clientSub = *client
-	}
-
-	getBanner(sendingDelay, retryDelay, clientSub)
-}
-
-func getBanner(sndDelay, retryDelay time.Duration, client string) {
-	fmt.Printf("DNS Resolver Subnet Client Test\n"+
-		"[+] Nameserver:    %v\n"+
-		"[+] Subnet Client: %v\n"+
-		"[+] Thread Count:  %v\n"+
-		"[+] Sending Delay: %s (%d pps)\n"+
-		"[+] Retry Delay:   %s\n\n",
-		*dnsServer, client, *concurrency, sendingDelay,
-		*packetsPerSecond, retryDelay)
 }
 
 func doMapGuard(
@@ -434,9 +389,56 @@ func finalStats(avgTries float64) {
 		"[+] Attempts:         %v\n"+
 		"[+] Success:          %v\n"+
 		"[+] Failed:           %v\n"+
-		"[+] Avg Rate:         %.3f queries/s\n"+
 		"[+] Avg Retry Count:  %.3f\n"+
+		"[+] Avg Rate:         %.3f queries/s\n"+
 		"[+] Elapsed Time:     %.3f s\n",
 		stats.attempts, stats.success, stats.fail,
 		avgTries, getStatAvg(), td.Seconds())
+}
+
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] -ns {nameserver}\n", os.Args[0])
+		flag.PrintDefaults()
+	}
+	flag.Parse()
+
+	if *domainList == "" {
+		fmt.Println("Missing required domain list")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if flag.NArg() != 0 {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	sendingDelay = time.Duration(1000000000/(*packetsPerSecond)) * time.Nanosecond
+	var err error
+	retryDelay, err = time.ParseDuration(*retryTime)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Can't parse duration %s\n", *retryTime)
+		os.Exit(1)
+	}
+
+	var clientSub string
+	if *client == "" {
+		clientSub = "disabled"
+	} else {
+		clientSub = *client
+	}
+
+	getBanner(sendingDelay, retryDelay, clientSub)
+}
+
+func getBanner(sndDelay, retryDelay time.Duration, client string) {
+	fmt.Printf("DNS Resolver Subnet Client Test\n"+
+		"[+] Nameserver:    %v\n"+
+		"[+] Subnet Client: %v\n"+
+		"[+] Thread Count:  %v\n"+
+		"[+] Sending Delay: %s (%d pps)\n"+
+		"[+] Retry Delay:   %s\n\n",
+		*dnsServer, client, *concurrency, sendingDelay,
+		*packetsPerSecond, retryDelay)
 }
