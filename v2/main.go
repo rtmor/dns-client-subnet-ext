@@ -364,7 +364,9 @@ func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
 }
 
 func updateStats(done <-chan bool) {
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	lastCount := stats.success
+	var deltaCount int
 
 	for {
 		select {
@@ -372,10 +374,13 @@ func updateStats(done <-chan bool) {
 			ticker.Stop()
 			return
 		case <-ticker.C:
+			currentCount := stats.success
+			deltaCount = currentCount - lastCount
+			lastCount = currentCount
 			timeValues = append(timeValues, float64(time.Since(t0).Seconds()))
-			rateValues = append(rateValues, getStatAvg())
+			rateValues = append(rateValues, float64(deltaCount*20))
 		default:
-			fmt.Printf("\033[2K\rRate: %.4f queries/s", getStatAvg())
+			fmt.Printf("\033[2K\rRate: %.4f queries/s", float64(deltaCount*20))
 		}
 
 	}
