@@ -59,7 +59,7 @@ var (
 	domainList       = flag.String("d", "", "Location of domain list file")
 	client           = flag.String("c", "", "Client subnet address")
 	outputDir        = flag.String("o", "Output", "Location of output directory")
-	retryCount       = flag.Int("retries", 3, "Number of attempts made to resolve a domain")
+	retryCount       = flag.Int("retries", 1, "Number of attempts made to resolve a domain")
 )
 
 func main() {
