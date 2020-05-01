@@ -74,7 +74,7 @@ func BuildGraph(nameserver, client string, clientStatus bool,
 		chart.Legend(&graph),
 	}
 
-	if _, err := os.Stat(output); os.IsNotExist(err) {
+	if _, err := os.Stat(fmt.Sprintf("%v/%v", output, nameserver)); os.IsNotExist(err) {
 		os.Mkdir(output, os.ModePerm)
 	}
 
