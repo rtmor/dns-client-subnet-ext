@@ -367,6 +367,7 @@ func updateStats(done <-chan bool) {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	lastCount := stats.success
 	var deltaCount int
+	var deadStop int = 400
 
 	for {
 		select {
@@ -374,6 +375,14 @@ func updateStats(done <-chan bool) {
 			ticker.Stop()
 			return
 		case <-ticker.C:
+			if deltaCount == 0 {
+				deadStop--
+				if deadStop < 1 {
+					graph.BuildGraph(*dnsServer, *client, len(*client) != 0,
+						&timeValues, &rateValues, *concurrency, stats.success, *outputDir)
+					os.Exit(2)
+				}
+			}
 			currentCount := stats.success
 			deltaCount = currentCount - lastCount
 			lastCount = currentCount
