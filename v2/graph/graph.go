@@ -53,7 +53,7 @@ func BuildGraph(nameserver, client string, clientStatus bool,
 			},
 		},
 		YAxis: chart.YAxis{
-			Name: "Successful Queries/sec",
+			Name: "Successful Queries/s",
 			Range: &chart.ContinuousRange{
 				Min: 0.0,
 			},
