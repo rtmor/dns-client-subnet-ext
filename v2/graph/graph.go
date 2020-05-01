@@ -78,8 +78,8 @@ func BuildGraph(nameserver, client string, clientStatus bool,
 		os.Mkdir(output, os.ModePerm)
 	}
 
-	f, err := os.Create(fmt.Sprintf("%v/ns-%v_client-%v_%4v.png",
-		output, nameserver, clientStatus, time.Now().Unix()))
+	f, err := os.Create(fmt.Sprintf("%v/%v/ns-%v_client-%v_%4v.png",
+		output, nameserver, nameserver, clientStatus, time.Now().Unix()))
 	if err != nil {
 		log.Printf("Error writing to file\n%v", err)
 	}
