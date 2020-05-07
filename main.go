@@ -52,7 +52,7 @@ var (
 
 var (
 	dnsServer        = flag.String("ns", "8.8.8.8", "DNS server address (ip)")
-	concurrency      = flag.Int("t", 1000, "Number of concurrent workers")
+	concurrency      = flag.Int("t", 200, "Number of concurrent workers")
 	packetsPerSecond = flag.Int("pps", 2000, "Send up to PPS DNS queries per second")
 	retryTime        = flag.String("rr", "1s", "Resend unanswered query after RETRY")
 	verbose          = flag.Bool("v", false, "Verbose logging")
@@ -211,6 +211,7 @@ func getTimeout(timeoutRegister <-chan *domainRecord,
 		dr := <-timeoutRegister
 		t := dr.timeout.Add(retryDelay)
 		now := time.Now()
+
 		if t.Sub(now) > 0 {
 			delta := t.Sub(now)
 			time.Sleep(delta)
@@ -354,13 +355,10 @@ func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
 	}
 
 	for range domainSlotAvailable {
-
 		if i == domainLength-1 {
 			break
 		}
-
 		domain := in[i] + "."
-
 		domains <- domain
 		i++
 	}
@@ -368,10 +366,11 @@ func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
 }
 
 func updateStats(done <-chan bool) {
-	ticker := time.NewTicker(100 * time.Millisecond)
-	lastCount := stats.success
 	var deltaCount int
 	var deadStop int = 75
+	interval := 50 * time.Millisecond
+	ticker := time.NewTicker(interval)
+	lastCount := stats.success
 
 	for {
 		select {
@@ -392,9 +391,12 @@ func updateStats(done <-chan bool) {
 			deltaCount = currentCount - lastCount
 			lastCount = currentCount
 			timeValues = append(timeValues, float64(time.Since(t0).Seconds()))
-			rateValues = append(rateValues, float64(deltaCount*10))
+			rateValues = append(rateValues,
+				float64(deltaCount)/float64(interval)*float64(time.Second))
 		default:
-			fmt.Printf("\033[2K\rRate: %.4f queries/s", float64(deltaCount*10))
+			fmt.Printf("\033[2K\r[%.2f] rate: %.4f queries/s",
+				float64(time.Since(t0).Seconds()),
+				float64(deltaCount)/float64(interval)*float64(time.Second))
 		}
 
 	}
