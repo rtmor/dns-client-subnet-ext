@@ -101,6 +101,7 @@ func main() {
 
 	td = time.Now().Sub(t0)
 	done <- true
+	close(done)
 
 	finalStats(avgTries)
 }
@@ -137,7 +138,7 @@ func doMapGuard(
 			}
 			stats.attempts++
 
-			dr := &domainRecord{id, domain, time.Now(), 1}
+			dr := &domainRecord{id, domain, time.Now(), 0}
 			m[id] = dr
 
 			if *verbose {
@@ -161,10 +162,12 @@ func doMapGuard(
 				}
 				dr.resend++
 				dr.timeout = time.Now()
+
 				if *verbose {
 					fmt.Fprintf(os.Stderr, "0x%04x resend (try:%d) %s\n", dr.id,
 						dr.resend, dr.domain)
 				}
+
 				timeoutRegister <- dr
 				tryResolving <- dr
 			}
@@ -234,6 +237,7 @@ func writeRequest(c net.Conn, tryResolving <-chan *domainRecord) {
 
 func readRequest(c net.Conn, resolved chan<- *domainAnswer) {
 	buf := make([]byte, 4096)
+
 	for {
 		n, err := c.Read(buf)
 		if err != nil {
@@ -380,7 +384,7 @@ func updateStats(done <-chan bool) {
 				if deadStop < 1 {
 					graph.BuildGraph(*dnsServer, *client, len(*client) != 0,
 						&timeValues, &rateValues, *concurrency, stats.success, *outputDir)
-					fmt.Println("Requests being decline. Terminating Query.")
+					fmt.Println("Requests being decline. Terminating query.")
 					os.Exit(2)
 				}
 			}
