@@ -51,7 +51,7 @@ var (
 )
 
 var (
-	dnsServer        = flag.String("ns", "8.8.8.8", "DNS server address (ip)")
+	nameserver       = flag.String("ns", "8.8.8.8", "DNS server address (ip)")
 	concurrency      = flag.Int("t", 200, "Number of concurrent workers")
 	packetsPerSecond = flag.Int("pps", 2000, "Send up to PPS DNS queries per second")
 	retryTime        = flag.String("rr", "1s", "Resend unanswered query after RETRY")
@@ -72,13 +72,12 @@ func main() {
 
 	go readDomains(domains, domainSlotAvailable)
 
-	c, err := net.Dial("udp", fmt.Sprintf("%v:53", *dnsServer))
+	c, err := net.Dial("udp", fmt.Sprintf("%v:53", *nameserver))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bind(udp, %s): %s\n", *dnsServer, err)
+		fmt.Fprintf(os.Stderr, "bind(udp, %s): %s\n", *nameserver, err)
 		os.Exit(1)
 	}
 
-	// Used as a queue. Make sure it has plenty of storage available.
 	timeoutRegister := make(chan *domainRecord, *concurrency*1000)
 	timeoutExpired := make(chan *domainRecord)
 
@@ -115,9 +114,7 @@ func doMapGuard(
 	resolved <-chan *domainAnswer) float64 {
 
 	m := make(map[uint16]*domainRecord)
-
 	done := false
-
 	sumTries := 0
 
 	for done == false || len(m) > 0 {
@@ -136,7 +133,6 @@ func doMapGuard(
 					break
 				}
 			}
-			stats.attempts++
 
 			dr := &domainRecord{id, domain, time.Now(), 0}
 			m[id] = dr
@@ -145,6 +141,7 @@ func doMapGuard(
 				fmt.Fprintf(os.Stderr, "0x%04x resolving %s\n", id, domain)
 			}
 
+			stats.attempts++
 			timeoutRegister <- dr
 			tryResolving <- dr
 
@@ -155,10 +152,10 @@ func doMapGuard(
 					stats.fail++
 
 					if *verbose {
-						fmt.Fprintf(os.Stderr, "0x%04x resend (FAILED: exceed 3 attempts) %s\n", dr.id,
-							dr.domain)
+						fmt.Fprintf(os.Stderr, "0x%04x resend (FAILED: exceed %v attempts) %s\n",
+							dr.id, *retryCount, dr.domain)
 					}
-					continue
+					break
 				}
 				dr.resend++
 				dr.timeout = time.Now()
@@ -243,6 +240,11 @@ func readRequest(c net.Conn, resolved chan<- *domainAnswer) {
 		n, err := c.Read(buf)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
+			finalStats(getStatAvg())
+			graph.BuildGraph(
+				*nameserver, *client, len(*client) != 0,
+				&timeValues, &rateValues, *concurrency,
+				stats.success, *outputDir)
 			os.Exit(1)
 		}
 
@@ -309,8 +311,12 @@ func setupOptions() *dns.OPT {
 	return o
 }
 
+func getRunTime() float64 {
+	return float64(time.Since(t0).Seconds())
+}
+
 func getStatAvg() float64 {
-	runTime := float64(time.Since(t0).Seconds())
+	runTime := getRunTime()
 	successCount := float64(stats.success)
 	successRate := successCount / runTime
 
@@ -366,8 +372,9 @@ func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
 }
 
 func updateStats(done <-chan bool) {
+	// Stop execution after 100 zero-rate returns
+	var deadStop int = 100
 	var deltaCount int
-	var deadStop int = 75
 	interval := 50 * time.Millisecond
 	ticker := time.NewTicker(interval)
 	lastCount := stats.success
@@ -381,21 +388,23 @@ func updateStats(done <-chan bool) {
 			if deltaCount == 0 {
 				deadStop--
 				if deadStop < 1 {
-					graph.BuildGraph(*dnsServer, *client, len(*client) != 0,
-						&timeValues, &rateValues, *concurrency, stats.success, *outputDir)
-					fmt.Println("Requests being decline. Terminating query.")
+					graph.BuildGraph(
+						*nameserver, *client, len(*client) != 0,
+						&timeValues, &rateValues, *concurrency,
+						stats.success, *outputDir)
+					fmt.Println("Requests being declined. Terminating query.")
 					os.Exit(2)
 				}
 			}
 			currentCount := stats.success
 			deltaCount = currentCount - lastCount
 			lastCount = currentCount
-			timeValues = append(timeValues, float64(time.Since(t0).Seconds()))
+			timeValues = append(timeValues, getRunTime())
 			rateValues = append(rateValues,
 				float64(deltaCount)/float64(interval)*float64(time.Second))
 		default:
 			fmt.Printf("\033[2K\r[%.2f] rate: %.4f queries/s",
-				float64(time.Since(t0).Seconds()),
+				getRunTime(),
 				float64(deltaCount)/float64(interval)*float64(time.Second))
 		}
 
@@ -403,7 +412,7 @@ func updateStats(done <-chan bool) {
 }
 
 func finalStats(avgTries float64) {
-	graph.BuildGraph(*dnsServer, *client, len(*client) != 0,
+	graph.BuildGraph(*nameserver, *client, len(*client) != 0,
 		&timeValues, &rateValues, *concurrency, stats.success, *outputDir)
 
 	fmt.Printf("\n\nFinal Statistics\n"+
@@ -460,6 +469,6 @@ func getBanner(sndDelay, retryDelay time.Duration, client string) {
 		"[+] Thread Count:  %v\n"+
 		"[+] Sending Delay: %s (%d pps)\n"+
 		"[+] Retry Delay:   %s\n\n",
-		*dnsServer, client, *concurrency, sendingDelay,
+		*nameserver, client, *concurrency, sendingDelay,
 		*packetsPerSecond, retryDelay)
 }
