@@ -44,10 +44,11 @@ var (
 )
 
 var (
-	t0      time.Time = time.Now()
-	td      time.Duration
-	avgRate float64
-	stats   statistics
+	t0       time.Time = time.Now()
+	td       time.Duration
+	avgRate  float64
+	avgTries float64
+	stats    statistics
 )
 
 var (
@@ -85,6 +86,7 @@ func main() {
 	tryResolving := make(chan *domainRecord, *concurrency)
 
 	done := make(chan bool)
+	defer close(done)
 
 	go getTimeout(timeoutRegister, timeoutExpired)
 	go writeRequest(c, tryResolving)
@@ -93,16 +95,15 @@ func main() {
 
 	t0 = time.Now()
 
-	avgTries := doMapGuard(
+	doMapGuard(
 		domains, domainSlotAvailable,
 		timeoutRegister, timeoutExpired,
 		tryResolving, resolved)
 
 	td = time.Now().Sub(t0)
 	done <- true
-	close(done)
 
-	finalStats(avgTries)
+	finalStats()
 }
 
 func doMapGuard(
@@ -111,7 +112,7 @@ func doMapGuard(
 	timeoutRegister chan<- *domainRecord,
 	timeoutExpired <-chan *domainRecord,
 	tryResolving chan<- *domainRecord,
-	resolved <-chan *domainAnswer) float64 {
+	resolved <-chan *domainAnswer) {
 
 	m := make(map[uint16]*domainRecord)
 	done := false
@@ -149,6 +150,7 @@ func doMapGuard(
 			if m[dr.id] == dr {
 				if dr.resend == *retryCount {
 					delete(m, dr.id)
+					domainSlotAvailable <- true
 					stats.fail++
 
 					if *verbose {
@@ -199,7 +201,7 @@ func doMapGuard(
 			}
 		}
 	}
-	return float64(sumTries) / float64(stats.success)
+	avgTries = float64(sumTries) / float64(stats.success)
 }
 
 func getTimeout(timeoutRegister <-chan *domainRecord,
@@ -209,8 +211,7 @@ func getTimeout(timeoutRegister <-chan *domainRecord,
 		t := dr.timeout.Add(retryDelay)
 		now := time.Now()
 
-		if t.Sub(now) > 0 {
-			delta := t.Sub(now)
+		if delta := t.Sub(now); delta > 0 {
 			time.Sleep(delta)
 		}
 		timeoutExpired <- dr
@@ -240,11 +241,6 @@ func readRequest(c net.Conn, resolved chan<- *domainAnswer) {
 		n, err := c.Read(buf)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "%s\n", err)
-			finalStats(getStatAvg())
-			graph.BuildGraph(
-				*nameserver, *client, len(*client) != 0,
-				&timeValues, &rateValues, *concurrency,
-				stats.success, *outputDir)
 			os.Exit(1)
 		}
 
@@ -337,7 +333,6 @@ func GetDomains(n string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to open domain file")
 	}
-
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
@@ -372,8 +367,8 @@ func readDomains(domains chan<- string, domainSlotAvailable <-chan bool) {
 }
 
 func updateStats(done <-chan bool) {
-	// Stop execution after 100 zero-rate returns
-	var deadStop int = 100
+	// Stop execution after 50 consecutive zero-rate returns
+	var deadStop int = 50
 	var deltaCount int
 	interval := 50 * time.Millisecond
 	ticker := time.NewTicker(interval)
@@ -388,13 +383,12 @@ func updateStats(done <-chan bool) {
 			if deltaCount == 0 {
 				deadStop--
 				if deadStop < 1 {
-					graph.BuildGraph(
-						*nameserver, *client, len(*client) != 0,
-						&timeValues, &rateValues, *concurrency,
-						stats.success, *outputDir)
 					fmt.Println("Requests being declined. Terminating query.")
+					finalStats()
 					os.Exit(2)
 				}
+			} else {
+				deadStop = 50
 			}
 			currentCount := stats.success
 			deltaCount = currentCount - lastCount
@@ -411,7 +405,7 @@ func updateStats(done <-chan bool) {
 	}
 }
 
-func finalStats(avgTries float64) {
+func finalStats() {
 	graph.BuildGraph(*nameserver, *client, len(*client) != 0,
 		&timeValues, &rateValues, *concurrency, stats.success, *outputDir)
 
